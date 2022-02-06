@@ -1,0 +1,252 @@
+#!/usr/bin/make -f
+
+INSTALL = /usr/bin/install
+INSTALLDIR = /usr/bin/install -d
+INSTALLDATA = /usr/bin/install -m 0644
+RM = /bin/rm -fv
+RMDIR = /bin/rm -frv
+SYMLINK = ln -sfvn
+
+PREFIX = __PREFIX__
+LOCAL_STATE_DIR = __LOCAL_STATE_DIR__
+SYS_CONF_DIR = __SYS_CONF_DIR__
+
+PACKAGE_VENDOR = __PACKAGE_VENDOR__
+PACKAGE_NAME = __PACKAGE_NAME__
+PACKAGE_VERSION = __PACKAGE_VERSION__
+
+SRC_DIR = src
+TEST_DIR = tests
+
+LIBRARY_PATH = share/koalephant/shell-script-library
+RUNTIME_PATH = $(LOCAL_STATE_DIR)/lib/koalephant/shell-script-library
+DOC_PATH = share/doc/koalephant/shell-script-library
+CFGET_BIN = __CFGET_BIN__
+GPG_BIN = __GPG_BIN__
+
+SCRIPT_BUILD := ./$(SRC_DIR)/k-script-build.sh
+
+SCRIPT_BUILD_STATIC := k-script-build-static
+SHELL_DOC_STATIC := k-shell-doc-static
+HELP2MAN_STATIC = k-help2man-static
+
+MAKEFLAGS += --no-builtin-rules
+.SUFFIXES:
+
+
+LIB = shell-script-library.lib.sh
+LIB_SCRIPTS = base.lib.sh bool.lib.sh config.lib.sh environment.lib.sh fs.lib.sh gpg.lib.sh hash.lib.sh number.lib.sh string.lib.sh
+LIB_SRC = $(addprefix $(SRC_DIR)/,$(LIB))
+LIB_SCRIPTS_SRC = $(addprefix $(SRC_DIR)/,$(LIB_SCRIPTS))
+LDAP_ATTRS = $(wildcard $(SRC_DIR)/ldap-attr-maps/*.attrs)
+CFGET_PLUGINS = $(wildcard $(SRC_DIR)/cfget-plugins/*.py)
+CONFIG_MODULES = $(wildcard $(SRC_DIR)/config-modules/*)
+HASH_MODULES = $(wildcard $(SRC_DIR)/hash-modules/*)
+INSTALL_SCRIPT = install.sh
+
+ERRATA = CHANGELOG.md README.md LICENCE Vagrantfile build-test-all.sh install-deps.sh $(TEST_DIR)/test-apache.conf $(TEST_DIR)/test-conf.conf $(TEST_DIR)/test-conf2.conf $(TEST_DIR)/gpg.conf $(TEST_DIR)/perms.py $(TEST_DIR)/fs-cleanup-signals.sh $(SRC_DIR)/$(INSTALL_SCRIPT) $(INSTALL_SCRIPT)
+
+RELEASE = "$(PACKAGE_VENDOR)-$(PACKAGE_NAME)-$(PACKAGE_VERSION).tar.gz"
+
+TOOLS = k-help2man k-shell-doc k-script-build k-version-compare k-tool-install
+TOOLS_SRC = $(addprefix $(SRC_DIR)/,$(addsuffix .sh,$(TOOLS)))
+
+STATIC_BUILDS = $(addsuffix -static,$(TOOLS))
+
+TEST_SCRIPTS = $(addprefix $(TEST_DIR)/,$(LIB_SCRIPTS))
+TEST_RUNS = $(addsuffix .test,$(TEST_SCRIPTS))
+SHELL = __SHELL__
+SHELL_ARGS = __SHELL_ARGS__
+SHELL_NAME = $(notdir $(SHELL))
+SHELL_FAMILY = __SHELL_FAMILY__
+OS = $(shell uname -s)
+
+SHELLCHECK = __SHELLCHECK__
+SHELLCHECK_RUNS = $(addsuffix .shellcheck,$(LIB_SCRIPTS_SRC) $(TOOLS_SRC))
+SHUNIT2 = __SHUNIT2__
+
+ALL_SOURCES = $(LIB_SRC) $(LIB_SCRIPTS_SRC) $(TOOLS_SRC)
+
+ALL_DEPS = $(addsuffix .mk,$(ALL_SOURCES))
+
+MAN_DIR = man
+MAN_PAGES = $(addprefix $(MAN_DIR)/,$(addsuffix .1,$(TOOLS)))
+
+DOCS_DIR = docs
+DOC_PAGES = $(addprefix $(DOCS_DIR)/,$(LIB_SCRIPTS:.sh=.md))
+
+RELEASE_FILES = $(TOOLS_SRC) $(LIB_SRC) $(LIB_SCRIPTS_SRC) $(LDAP_ATTRS) $(CONFIG_MODULES) $(HASH_MODULES) $(CFGET_PLUGINS) $(MAN_PAGES) $(DOC_PAGES) $(TEST_SCRIPTS) configure Makefile.in $(ERRATA)
+
+CHECKSUM_FILE = $(OS)-$(SHELL_NAME).SHA1SUMS
+CHECKSUM_TARGETS = $(TOOLS) $(LIB) $(LIB_SCRIPTS) $(DOC_PAGES) $(MAN_PAGES)
+
+build: build-tools build-lib build-doc ## Build everything
+
+build-tools: $(TOOLS) ## Build just the tools
+
+build-lib: $(LIB) $(LIB_SCRIPTS) ## Build just the library
+
+build-doc: $(DOC_PAGES) $(MAN_PAGES) ## Build the docs and man pages
+
+-include $(ALL_DEPS)
+
+$(ALL_DEPS): %.mk: % Makefile | $(SCRIPT_BUILD_STATIC)
+	$(SHELL) $(SHELL_ARGS) $(SCRIPT_BUILD_STATIC) \
+		--define PREFIX=$(PREFIX) \
+		--define PACKAGE_VENDOR=$(PACKAGE_VENDOR) \
+		--define PACKAGE_NAME=$(PACKAGE_NAME) \
+		--define PACKAGE_VERSION=$(PACKAGE_VERSION) \
+		--define LIBRARY_PATH=$(LIBRARY_PATH) \
+		--define RUNTIME_PATH=$(RUNTIME_PATH) \
+		--define CFGET_BIN=$(CFGET_BIN) \
+		--define GPG_BIN=$(GPG_BIN) \
+		--static '*' \
+		--make-deps \
+		--file $< \
+		--output $@
+
+$(STATIC_BUILDS): %-static: $(SRC_DIR)/%.sh $(SCRIPT_BUILD) $(LIB_SCRIPTS_SRC) Makefile
+	cd $(SRC_DIR) && $(SHELL) $(SHELL_ARGS) $(notdir $(SCRIPT_BUILD)) \
+		--define PREFIX=$(PREFIX) \
+		--define PACKAGE_VENDOR=$(PACKAGE_VENDOR) \
+		--define PACKAGE_NAME=$(PACKAGE_NAME) \
+		--define PACKAGE_VERSION=$(PACKAGE_VERSION) \
+		--define LIBRARY_PATH=$(LIBRARY_PATH) \
+		--define RUNTIME_PATH=$(RUNTIME_PATH) \
+		--define CFGET_BIN=$(CFGET_BIN) \
+		--define GPG_BIN=$(GPG_BIN) \
+		--executable \
+		--static \
+		--file $(<F) \
+		--output ../$@
+
+$(LIB): %: $(SRC_DIR)/% Makefile | $(SCRIPT_BUILD_STATIC) Makefile
+	$(SHELL) $(SHELL_ARGS) $(SCRIPT_BUILD_STATIC) \
+		--define PREFIX=$(PREFIX) \
+		--define PACKAGE_VENDOR=$(PACKAGE_VENDOR) \
+		--define PACKAGE_NAME=$(PACKAGE_NAME) \
+		--define PACKAGE_VERSION=$(PACKAGE_VERSION) \
+		--define LIBRARY_PATH=$(LIBRARY_PATH) \
+		--define RUNTIME_PATH=$(RUNTIME_PATH) \
+		--define CFGET_BIN=$(CFGET_BIN) \
+		--define GPG_BIN=$(GPG_BIN) \
+		--link "./=$(PREFIX)/$(LIBRARY_PATH)/" \
+		--file $< \
+		--output $@
+
+$(LIB_SCRIPTS) $(INSTALL_SCRIPT): %: $(SRC_DIR)/% Makefile | $(SCRIPT_BUILD_STATIC)
+	$(SHELL) $(SHELL_ARGS) $(SCRIPT_BUILD_STATIC) \
+		--define PREFIX=$(PREFIX) \
+		--define PACKAGE_VENDOR=$(PACKAGE_VENDOR) \
+		--define PACKAGE_NAME=$(PACKAGE_NAME) \
+		--define PACKAGE_VERSION=$(PACKAGE_VERSION) \
+		--define LIBRARY_PATH=$(LIBRARY_PATH) \
+		--define RUNTIME_PATH=$(RUNTIME_PATH) \
+		--define CFGET_BIN=$(CFGET_BIN) \
+		--define GPG_BIN=$(GPG_BIN) \
+		--file $< \
+		--output $@
+
+$(TOOLS): %: $(SRC_DIR)/%.sh Makefile | $(SCRIPT_BUILD_STATIC)
+	$(SHELL) $(SHELL_ARGS) $(SCRIPT_BUILD_STATIC) \
+		--define PREFIX=$(PREFIX) \
+		--define PACKAGE_VENDOR=$(PACKAGE_VENDOR) \
+		--define PACKAGE_NAME=$(PACKAGE_NAME) \
+		--define PACKAGE_VERSION=$(PACKAGE_VERSION) \
+		--define LIBRARY_PATH=$(LIBRARY_PATH) \
+		--define RUNTIME_PATH=$(RUNTIME_PATH) \
+		--define CFGET_BIN=$(CFGET_BIN) \
+		--define GPG_BIN=$(GPG_BIN) \
+		--link "./=$(PREFIX)/$(LIBRARY_PATH)/" \
+		--executable \
+		--file $< \
+		--output $@
+
+$(MAN_PAGES): $(MAN_DIR)/%.1: %-static $(HELP2MAN_STATIC)
+	$(SHELL) $(SHELL_ARGS) $(HELP2MAN_STATIC) --source "$(PACKAGE_VENDOR)-$(PACKAGE_NAME) $(PACKAGE_VERSION)" --cd $< > $@
+
+$(DOC_PAGES): $(DOCS_DIR)/%.md: %.sh $(SHELL_DOC_STATIC)
+	$(SHELL) $(SHELL_ARGS) $(SHELL_DOC_STATIC) --md-extra-ids false $< > $@
+
+install: install-bin install-doc install-lib ## Install everything
+
+uninstall: uninstall-bin uninstall-doc uninstall-lib ## Uninstall everything
+
+install-bin: $(TOOLS) ## Install the tools
+	$(INSTALLDIR) $(DESTDIR)$(PREFIX)/bin/
+	$(INSTALL) $(TOOLS) $(DESTDIR)$(PREFIX)/bin/
+
+uninstall-bin: ## Uninstall the tools
+	$(RM) $(addprefix $(DESTDIR)$(PREFIX)/bin/,$(TOOLS))
+
+install-lib: $(LIB) $(LIB_SCRIPTS) $(LDAP_ATTRS) $(CFGET_PLUGINS) $(HASH_MODULES) $(CONFIG_MODULES) ## Install the library
+	$(INSTALLDIR) $(DESTDIR)$(PREFIX)/$(LIBRARY_PATH)/ldap-attr-maps/
+	$(INSTALLDIR) $(DESTDIR)$(PREFIX)/$(LIBRARY_PATH)/cfget-plugins/
+	$(INSTALLDIR) $(DESTDIR)$(PREFIX)/$(LIBRARY_PATH)/config-modules/
+	$(INSTALLDIR) $(DESTDIR)$(PREFIX)/$(LIBRARY_PATH)/hash-modules/
+	$(INSTALLDIR) $(DESTDIR)$(RUNTIME_PATH)
+
+	$(INSTALLDATA) $(LIB) $(LIB_SCRIPTS) $(DESTDIR)$(PREFIX)/$(LIBRARY_PATH)/
+	$(INSTALLDATA) $(LDAP_ATTRS) $(DESTDIR)$(PREFIX)/$(LIBRARY_PATH)/ldap-attr-maps/
+	$(INSTALLDATA) $(CFGET_PLUGINS) $(DESTDIR)$(PREFIX)/$(LIBRARY_PATH)/cfget-plugins/
+	$(INSTALLDATA) $(CONFIG_MODULES) $(DESTDIR)$(PREFIX)/$(LIBRARY_PATH)/config-modules/
+	$(INSTALLDATA) $(HASH_MODULES) $(DESTDIR)$(PREFIX)/$(LIBRARY_PATH)/hash-modules/
+
+uninstall-lib: ## Uninstall the library
+	$(RMDIR) $(DESTDIR)$(PREFIX)/$(LIBRARY_PATH) $(DESTDIR)$(RUNTIME_PATH)
+
+install-doc: $(MAN_PAGES) ## Install the man pages
+	$(INSTALLDIR) $(DESTDIR)$(PREFIX)/share/man/man1/
+	$(INSTALLDATA) $(MAN_PAGES) $(DESTDIR)$(PREFIX)/share/man/man1/
+
+uninstall-doc: ## Uninstall the man pages
+	$(RM) $(addprefix $(DESTDIR)$(PREFIX)/share/man/man1/,$(MAN_PAGES))
+
+checksums: $(CHECKSUM_FILE) ## Generate checksums for all built scripts
+
+$(CHECKSUM_FILE): $(CHECKSUM_TARGETS)
+	shasum -a 1 $^ > $@
+
+test: shellcheck test-runs ## Lint code and Run tests
+
+test-runs: $(TEST_RUNS) ## Run unit tests
+
+$(TEST_RUNS): %.test: % $(LIB_SCRIPTS) $(TEST_SCRIPTS)
+	cd $(<D) && KOALEPHANT_LIB_PATH=../$(SRC_DIR) $(SHELL) $(SHELL_ARGS) $(SHUNIT2) $(<F)
+
+shellcheck: $(SHELLCHECK_RUNS) ## Run shellcheck tests against the source
+
+$(SHELLCHECK_RUNS): %.shellcheck: %
+	cd $(<D) && $(SHELLCHECK) --shell=$(SHELL_FAMILY) --external-sources $(<F)
+
+tests-scripts: $(TEST_SCRIPTS) ## Generate test scaffolds
+
+$(TEST_SCRIPTS): $(TEST_DIR)/%: %
+
+	sed -E -n -e 's#^(k_[A-Za-z0-9_\.]+)\s*\(\)\s*\{#\1#p' "$<" | sort > "$<.names"
+	sed -E -n -e 's#^test_(k_[A-Za-z0-9_\.]+)\s*\(\)\s*\{#\1#p' "$@" | sort  > "$@.names"
+	diff "$<.names" "$@.names" | sed -n -E -e 's#^< (.+)$$#\1#p' | sed -E -e "s#(.+)#\n\ntest_\1 (){\n\tprintf -- 'Empty test for \"%s\"\\\n' '\1' \>\&2\n\}\n#" >> $@
+	$(RM) "$<.names" "$@.names"
+
+dist release: $(RELEASE) ## Create the release .tar.gz file
+
+$(RELEASE): $(RELEASE_FILES)
+	@[ -z "$$(sed -n -E -e 's/##[[:space:]]*\[([[:alnum:].\-]+).*Unreleased.*/Cannot make release file, version \1 is unreleased/p' CHANGELOG.md | tee /dev/stderr)" ] || exit 1
+	tar -cvzf $@ $^
+
+Makefile: Makefile.in configure configure.options CHANGELOG.md
+	./configure
+
+help: ## Show this help
+	@grep -h -E '^[ a-zA-Z_-]+:.*?## .*$$' Makefile | sed -E 's/([^: ]+) ([^: ]+):/\1|\2:/' | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-25s\033[0m %s\n", $$1, $$2}'
+
+print-%:
+	@echo '$*=$($*)'
+
+clean: ## Remove all configure/build artefacts
+	$(RM) $(LIB) $(LIB_SCRIPTS) $(STATIC_BUILDS) $(TOOLS) $(INSTALL_SCRIPT)
+
+distclean: clean ## Remove configure artefacts
+	$(RM) Makefile configure.options $(ALL_DEPS)
+
+.PHONY: deps clean distclean build build-tools build-lib build-doc build-man install install-bin install-lib install-man uninstall uninstall-bin uninstall-lib uninstall-man test test-runs shellcheck $(TEST_RUNS) $(SHELLCHECK_RUNS) $(TEST_SCRIPTS)

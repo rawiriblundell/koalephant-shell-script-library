@@ -1,0 +1,19 @@
+#@IgnoreInspection BashAddShebang
+local ATTR_cn=commonName # this is a comment
+local ATTR_c=countryName
+local ATTR_dn=distinguishedName
+local ATTR_dc=domainComponent
+local ATTR_co=friendlyCountryName
+local ATTR_gn=givenName
+local ATTR_homePhone=homeTelephoneNumber
+local ATTR_l=localityName
+local ATTR_mobile=mobileTelephoneNumber
+local ATTR_o=organizationName
+local ATTR_ou=organizationalUnitName
+local ATTR_pager=pagerTelephoneNumber
+local ATTR_rfc822Mailbox=mail
+local ATTR_sn=surname
+local ATTR_st=stateOrProvinceName
+local ATTR_street=streetAddress
+local ATTR_uid=userid
+

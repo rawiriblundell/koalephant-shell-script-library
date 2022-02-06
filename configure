@@ -1,0 +1,227 @@
+#!/bin/sh -eu
+
+# Configure script for Koalephant Shell Script Tools
+# Version: 1.1.0
+# Copyright: 2015, Koalephant Co., Ltd
+# Author: Stephen Reay <stephen@koalephant.com>, Koalephant Packaging Team <packages@koalephant.com>
+
+koalephant_shell_script_library_configure() {
+
+	# shellcheck disable=SC2039
+	local PACKAGE_VENDOR PACKAGE_NAME PACKAGE_VERSION
+
+	# shellcheck disable=SC2039
+	local prefix="/usr/local" sysconfdir="/etc" localstatedir="/var" cfgetBin="cfget" gpgBin="gpg2 gpg" withCfget=false shell='sh' shellFamily='' shellArgs='' shunit2Bin='shunit2' shellcheckBin='shellcheck'
+
+	readonly PACKAGE_VENDOR="koalephant" PACKAGE_NAME="shell-script-library" PACKAGE_VERSION="$(sed -E -n -e 's/##[[:space:]]*\[([^]]+)\].*/\1/p' CHANGELOG.md | head -n 1)"
+
+	check_binary() {
+		# shellcheck disable=SC2039
+		local bin name binTry useAbs binAbs
+
+		bin="$1"
+		name="$2"
+		useAbs="${3:-false}"
+		suppressError="${4:-false}"
+
+		for binTry in ${bin}; do
+			printf 'Checking for %s binary: %s\n' "${name}" "${binTry}" >&2
+
+			if binAbs="$(command -v "${binTry}")"; then
+				printf -- 'Found %s: %s\n' "${name}" "${binAbs}" >&2
+
+				if [ ${useAbs} = true ]; then
+					printf -- '%s' "${binAbs}"
+				else
+					printf -- '%s' "${binTry}"
+				fi
+				return 0
+			fi
+		done
+
+		if [ "${suppressError}" = false ]; then
+			printf -- 'Error: cannot find %s in %s\n' "${name}" "${binTry}" >&2
+			return 1
+		fi
+	}
+
+	usage() {
+		cat <<-EOT
+		Koalepahnt Shell Script Library configure script
+
+		Usage: ${0} [options]
+
+		Options:
+
+		 --prefix path         the path prefix to use when installing binaries and libraries
+
+		 --sysconfdir path     the path to use for configuration files
+
+		 --localstatedir path  the path to use for data
+
+		 --with-cfget          enable lookup of cfget
+
+		 --cfget path          the path to the cfget binary to use
+
+		 --gpg path            the path to the gpg binary to use
+
+		 --shell shell         the shell to use when building and running tests. Defaults to 'sh'
+
+		 --shell-args args     any arguments to pass to the shell binary
+
+		 --shunit2 path        the path to the shunit2 script to use (for testing)
+
+		 --shellcheck path     the path to the shellcheck script to use (for linting)
+
+
+		EOT
+	}
+
+
+	check_cfget() {
+		cfgetBin="$(check_binary "${cfgetBin}" cfget)"
+	}
+
+	check_gpg() {
+		gpgBin="$(check_binary "${gpgBin}" gpg)"
+	}
+
+	check_shell() {
+		shell="$(check_binary "${shell}" shell)"
+		case "${shell##*/}" in
+			(posh|mksh)
+				shellFamily=ksh
+			;;
+			(*)
+				shellFamily="${shell##*/}"
+			;;
+		esac
+	}
+
+	check_shunit2() {
+		shunit2Bin="$(check_binary "${shunit2Bin}" shunit2 true true)"
+	}
+
+	check_shellcheck() {
+		shellcheckBin="$(check_binary "${shellcheckBin}" shellcheck false true)"
+	}
+
+	if [ -f ./configure.options ]; then
+		. ./configure.options
+	fi
+
+	while [ $# -gt 0 ]; do
+		case "$1" in
+
+			--prefix)
+				prefix="${2}"
+				shift 2
+			;;
+
+			--sysconfdir)
+				sysconfdir="${2}"
+				shift 2
+			;;
+
+			--localstatedir)
+				localstatedir="${2}"
+				shift 2
+			;;
+
+			--cfget)
+				cfgetBin="${2}"
+				withCfget=true
+				shift 2
+			;;
+
+			--with-cfget)
+				withCfget=true
+				shift
+			;;
+
+			--gpg)
+				gpgBin="${2}"
+				shift 2
+			;;
+
+			--shell)
+				shell="${2}"
+				shift 2
+			;;
+
+			--shell-args)
+				shellArgs="${2}"
+				shift 2
+			;;
+
+			--shunit2)
+				shunit2Bin="${2}"
+				shift 2
+			;;
+
+			--shellcheck)
+				shellcheckBin="${2}"
+				shift 2
+			;;
+
+			--help|-h|help)
+				usage
+				exit
+			;;
+
+			--)
+				shift
+				break
+			;;
+
+			*)
+				break
+			;;
+		esac
+	done
+
+
+	if [ ${withCfget} = true ]; then
+		check_cfget
+	else
+		cfgetBin=''
+	fi
+	check_gpg
+	check_shell
+	check_shellcheck
+	check_shunit2
+
+	echo "prefix='${prefix}'" > ./configure.options
+	cat <<-EOT > ./configure.options
+		prefix='${prefix}'
+		sysconfdir='${sysconfdir}'
+		localstatedir='${localstatedir}'
+		cfgetBin='${cfgetBin}'
+		withCfget='${withCfget}'
+		gpgBin='${gpgBin}'
+		shell='${shell}'
+		shellArgs='${shellArgs}'
+		shellFamily='${shellFamily}'
+		shunit2Bin='${shunit2Bin}'
+		shellcheckBin='${shellcheckBin}'
+
+	EOT
+
+	sed -E \
+		-e "s#__PACKAGE_VENDOR__#${PACKAGE_VENDOR}#g" \
+		-e "s#__PACKAGE_NAME__#${PACKAGE_NAME}#g" \
+		-e "s#__PACKAGE_VERSION__#${PACKAGE_VERSION}#g" \
+		-e "s#__PREFIX__#${prefix}#g" \
+		-e "s#__SYS_CONF_DIR__#${sysconfdir}#g" \
+		-e "s#__LOCAL_STATE_DIR__#${localstatedir}#g" \
+		-e "s#__CFGET_BIN__#${cfgetBin}#g" \
+		-e "s#__GPG_BIN__#${gpgBin}#g" \
+		-e "s#__SHELL__#${shell}#g" \
+		-e "s#__SHELL_ARGS__#${shellArgs}#g" \
+		-e "s#__SHELL_FAMILY__#${shellFamily}#g" \
+		-e "s#__SHELLCHECK__#${shellcheckBin}#g" \
+		-e "s#__SHUNIT2__#${shunit2Bin}#g" \
+		./Makefile.in > Makefile
+}
+
+koalephant_shell_script_library_configure "$@"
